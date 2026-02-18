@@ -73,6 +73,14 @@ class Program
     static async Task<TrackInfo> GetMediaInfo()
     {
         var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+
+        // DIAGNOSTIC: log all sessions so we can see the real Tidal app ID
+        foreach (var s in manager.GetSessions())
+        {
+            var p = await s.TryGetMediaPropertiesAsync();
+            Console.WriteLine("[session] appId=" + s.SourceAppUserModelId + " title=" + p?.Title);
+        }
+
         var session = manager.GetCurrentSession();
         if (session == null) return new();
 
