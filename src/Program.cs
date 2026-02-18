@@ -52,11 +52,11 @@ class Program
                 var info = await GetMediaInfo();
                 lock (trackLock)
                 {
-                    if (info.Title != current.Title || info.Artist != current.Artist)
+                    if (info.Title != current.Title || info.Artist != current.Artist || info.IsPlaying != current.IsPlaying)
                     {
                         current = info;
                         if (!string.IsNullOrEmpty(info.Title))
-                            Console.WriteLine($"▶  {info.Artist} – {info.Title}");
+                            Console.WriteLine($"▶  {info.Artist} – {info.Title} [{(info.IsPlaying ? "playing" : "paused")}]");
                         else
                             Console.WriteLine("   (nothing playing)");
                     }
@@ -98,7 +98,6 @@ class Program
         if (props == null) return new();
 
         var pb = session.GetPlaybackInfo();
-        Console.WriteLine("[status] " + pb?.PlaybackStatus);
         bool playing = pb?.PlaybackStatus ==
             GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
 
