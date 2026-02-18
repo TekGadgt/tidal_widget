@@ -98,6 +98,7 @@ class Program
         if (props == null) return new();
 
         var pb = session.GetPlaybackInfo();
+        Console.WriteLine("[status] " + pb?.PlaybackStatus);
         bool playing = pb?.PlaybackStatus ==
             GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
 
