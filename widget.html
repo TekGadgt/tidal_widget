@@ -1,280 +1,353 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Now Playing</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
-<style>
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Now Playing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-  body {
-    background: transparent;
-    width: 420px;
-    height: 110px;
-    overflow: hidden;
-    font-family: 'DM Mono', monospace;
-  }
+    body {
+      background: transparent;
+      width: 420px;
+      height: 110px;
+      overflow: hidden;
+      font-family: 'DM Mono', monospace;
+    }
 
-  #widget {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 14px;
-    background: rgba(8, 8, 10, 0.82);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 6px;
-    opacity: 0;
-    transform: translateY(6px);
-    transition: opacity 0.4s ease, transform 0.4s ease;
-  }
+    #widget {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      background: rgba(8, 8, 10, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 6px;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
 
-  #widget.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
+    #widget.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
 
-  /* Album art */
-  #art-wrap {
-    position: relative;
-    flex-shrink: 0;
-    width: 72px;
-    height: 72px;
-  }
+    /* Album art */
+    #art-wrap {
+      position: relative;
+      flex-shrink: 0;
+      width: 72px;
+      height: 72px;
+    }
 
-  #art {
-    width: 72px;
-    height: 72px;
-    border-radius: 3px;
-    object-fit: cover;
-    display: block;
-    background: #1a1a1e;
-  }
+    #art {
+      width: 72px;
+      height: 72px;
+      border-radius: 3px;
+      object-fit: cover;
+      display: block;
+      background: #1a1a1e;
+    }
 
-  /* Equalizer bars overlay on art when playing */
-  #eq {
-    position: absolute;
-    bottom: 5px;
-    right: 5px;
-    display: flex;
-    align-items: flex-end;
-    gap: 2px;
-    height: 14px;
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
+    /* Equalizer bars overlay on art when playing */
+    #eq {
+      position: absolute;
+      bottom: 5px;
+      right: 5px;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 14px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
 
-  #eq.playing {
-    opacity: 1;
-  }
+    #eq.playing {
+      opacity: 1;
+    }
 
-  .bar {
-    width: 3px;
-    background: #fff;
-    border-radius: 1px;
-    animation: none;
-  }
+    .bar {
+      width: 3px;
+      background: #fff;
+      border-radius: 1px;
+      animation: none;
+    }
 
-  .bar:nth-child(1) { animation: eq1 0.8s ease-in-out infinite alternate; }
-  .bar:nth-child(2) { animation: eq2 0.65s ease-in-out infinite alternate; }
-  .bar:nth-child(3) { animation: eq3 0.9s ease-in-out infinite alternate; }
+    .bar:nth-child(1) {
+      animation: eq1 0.8s ease-in-out infinite alternate;
+    }
 
-  @keyframes eq1 { from { height: 3px; } to { height: 12px; } }
-  @keyframes eq2 { from { height: 7px; } to { height: 4px; } }
-  @keyframes eq3 { from { height: 4px; } to { height: 11px; } }
+    .bar:nth-child(2) {
+      animation: eq2 0.65s ease-in-out infinite alternate;
+    }
 
-  /* Text block */
-  #info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    overflow: hidden;
-  }
+    .bar:nth-child(3) {
+      animation: eq3 0.9s ease-in-out infinite alternate;
+    }
 
-  #label {
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    font-weight: 300;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.35);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
+    @keyframes eq1 {
+      from {
+        height: 3px;
+      }
 
-  #label::before {
-    content: '';
-    display: inline-block;
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: #00c2a8;
-    box-shadow: 0 0 6px #00c2a8;
-    flex-shrink: 0;
-  }
+      to {
+        height: 12px;
+      }
+    }
 
-  #title {
-    font-family: 'DM Serif Display', serif;
-    font-size: 19px;
-    color: #f0f0ee;
-    white-space: nowrap;
-    overflow: hidden;
-    line-height: 1.1;
-  }
+    @keyframes eq2 {
+      from {
+        height: 7px;
+      }
 
-  #artist {
-    font-size: 11px;
-    font-weight: 300;
-    color: rgba(255,255,255,0.5);
-    white-space: nowrap;
-    overflow: hidden;
-    letter-spacing: 0.04em;
-  }
+      to {
+        height: 4px;
+      }
+    }
 
-  /* Scroll animation for long text */
-  .scroll-wrap {
-    overflow: hidden;
-    position: relative;
-  }
+    @keyframes eq3 {
+      from {
+        height: 4px;
+      }
 
-  .scroll-wrap::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 0;
-    height: 100%;
-    width: 24px;
-    background: linear-gradient(to right, transparent, rgba(8,8,10,0.82));
-    pointer-events: none;
-  }
+      to {
+        height: 11px;
+      }
+    }
 
-  .scrolling {
-    display: inline-block;
-    animation: marquee 12s linear infinite;
-    padding-right: 40px;
-    white-space: nowrap;
-  }
+    /* Text block */
+    #info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      overflow: hidden;
+    }
 
-  @keyframes marquee {
-    0%   { transform: translateX(0); }
-    20%  { transform: translateX(0); }
-    80%  { transform: translateX(var(--scroll-dist, -120px)); }
-    100% { transform: translateX(var(--scroll-dist, -120px)); }
-  }
+    #label {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      font-weight: 300;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.35);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-  /* Divider line accent */
-  #accent {
-    width: 1px;
-    height: 52px;
-    background: linear-gradient(to bottom, transparent, rgba(0,194,168,0.5), transparent);
-    flex-shrink: 0;
-  }
-</style>
+    #label::before {
+      content: '';
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #00c2a8;
+      box-shadow: 0 0 6px #00c2a8;
+      flex-shrink: 0;
+    }
+
+    #title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 19px;
+      color: #f0f0ee;
+      white-space: nowrap;
+      overflow: hidden;
+      line-height: 1.1;
+    }
+
+    #artist {
+      font-size: 11px;
+      font-weight: 300;
+      color: rgba(255, 255, 255, 0.5);
+      white-space: nowrap;
+      overflow: hidden;
+      letter-spacing: 0.04em;
+    }
+
+    /* Scroll animation for long text */
+    .scroll-wrap {
+      overflow: hidden;
+      position: relative;
+    }
+
+    .scroll-wrap::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: 0;
+      height: 100%;
+      width: 24px;
+      background: linear-gradient(to right, transparent, rgba(8, 8, 10, 0.82));
+      pointer-events: none;
+    }
+
+    .scrolling {
+      display: inline-block;
+      animation: marquee 12s linear infinite;
+      padding-right: 40px;
+      white-space: nowrap;
+    }
+
+    @keyframes marquee {
+      0% {
+        transform: translateX(0);
+      }
+
+      20% {
+        transform: translateX(0);
+      }
+
+      80% {
+        transform: translateX(var(--scroll-dist, -120px));
+      }
+
+      100% {
+        transform: translateX(var(--scroll-dist, -120px));
+      }
+    }
+
+    /* Divider line accent */
+    #accent {
+      width: 1px;
+      height: 52px;
+      background: linear-gradient(to bottom, transparent, rgba(0, 194, 168, 0.5), transparent);
+      flex-shrink: 0;
+    }
+  </style>
 </head>
+
 <body>
-<div id="widget">
-  <div id="art-wrap">
-    <img id="art" src="" alt="">
-    <div id="eq">
-      <div class="bar"></div>
-      <div class="bar"></div>
-      <div class="bar"></div>
+  <div id="widget">
+    <div id="art-wrap">
+      <img id="art" src="" alt="">
+      <div id="eq">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+      </div>
+    </div>
+
+    <div id="accent"></div>
+
+    <div id="info">
+      <div id="label">Now Playing</div>
+      <div class="scroll-wrap" id="title-wrap">
+        <div id="title">—</div>
+      </div>
+      <div class="scroll-wrap" id="artist-wrap">
+        <div id="artist">—</div>
+      </div>
     </div>
   </div>
 
-  <div id="accent"></div>
+  <script>
+    const API = 'http://localhost:8765/now-playing';
+    const POLL_MS = 2000;
 
-  <div id="info">
-    <div id="label">Now Playing</div>
-    <div class="scroll-wrap" id="title-wrap">
-      <div id="title">—</div>
-    </div>
-    <div class="scroll-wrap" id="artist-wrap">
-      <div id="artist">—</div>
-    </div>
-  </div>
-</div>
+    const widget = document.getElementById('widget');
+    const artEl = document.getElementById('art');
+    const eqEl = document.getElementById('eq');
+    const titleEl = document.getElementById('title');
+    const titleWrap = document.getElementById('title-wrap');
+    const artistEl = document.getElementById('artist');
+    const artistWrap = document.getElementById('artist-wrap');
 
-<script>
-  const API = 'http://localhost:8765/now-playing';
-  const POLL_MS = 2000;
+    let lastTitle = '';
+    let hideTimer = null;
+    const HIDE_DELAY_MS = 10000; // hide 10s after pausing
 
-  const widget  = document.getElementById('widget');
-  const artEl   = document.getElementById('art');
-  const eqEl    = document.getElementById('eq');
-  const titleEl = document.getElementById('title');
-  const titleWrap = document.getElementById('title-wrap');
-  const artistEl = document.getElementById('artist');
-  const artistWrap = document.getElementById('artist-wrap');
-
-  let lastTitle = '';
-
-  function applyScroll(wrapEl, textEl, text) {
-    textEl.classList.remove('scrolling');
-    textEl.textContent = text;
-
-    // Measure after next frame
-    requestAnimationFrame(() => {
-      const overflow = textEl.scrollWidth - wrapEl.clientWidth;
-      if (overflow > 10) {
-        textEl.style.setProperty('--scroll-dist', `-${overflow + 20}px`);
-        textEl.classList.add('scrolling');
-      }
-    });
-  }
-
-  function update(data) {
-    if (!data || !data.title) {
-      widget.classList.remove('visible');
-      return;
+    function scheduleHide() {
+      if (hideTimer) return;
+      hideTimer = setTimeout(() => {
+        widget.classList.remove('visible');
+        hideTimer = null;
+      }, HIDE_DELAY_MS);
     }
 
-    widget.classList.add('visible');
+    function cancelHide() {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+    }
 
-    // Only animate in if track changed
-    if (data.title !== lastTitle) {
-      lastTitle = data.title;
-      applyScroll(titleWrap, titleEl, data.title);
-      applyScroll(artistWrap, artistEl, data.artist || 'Unknown Artist');
+    function applyScroll(wrapEl, textEl, text) {
+      textEl.classList.remove('scrolling');
+      textEl.textContent = text;
 
-      if (data.art) {
-        artEl.src = data.art;
+      // Measure after next frame
+      requestAnimationFrame(() => {
+        const overflow = textEl.scrollWidth - wrapEl.clientWidth;
+        if (overflow > 10) {
+          textEl.style.setProperty('--scroll-dist', `-${overflow + 20}px`);
+          textEl.classList.add('scrolling');
+        }
+      });
+    }
+
+    function update(data) {
+      if (!data || !data.title) {
+        scheduleHide();
+        return;
+      }
+
+      if (data.is_playing) {
+        cancelHide();
+        widget.classList.add('visible');
       } else {
-        artEl.src = '';
-        artEl.style.background = '#1a1a1e';
+        // Paused — only schedule hide, don't re-add visible on every poll
+        scheduleHide();
       }
+
+      // Only update text/art if track changed
+      if (data.title !== lastTitle) {
+        lastTitle = data.title;
+        applyScroll(titleWrap, titleEl, data.title);
+        applyScroll(artistWrap, artistEl, data.artist || 'Unknown Artist');
+
+        if (data.art) {
+          artEl.src = data.art;
+        } else {
+          artEl.src = '';
+          artEl.style.background = '#1a1a1e';
+        }
+      }
+
+      eqEl.classList.toggle('playing', !!data.is_playing);
     }
 
-    eqEl.classList.toggle('playing', !!data.is_playing);
-  }
-
-  async function poll() {
-    try {
-      const res = await fetch(API, { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        update(data);
+    async function poll() {
+      try {
+        const res = await fetch(API, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          update(data);
+        }
+      } catch {
+        // Server not running or nothing playing — hide widget
+        widget.classList.remove('visible');
       }
-    } catch {
-      // Server not running or nothing playing — hide widget
-      widget.classList.remove('visible');
+      setTimeout(poll, POLL_MS);
     }
-    setTimeout(poll, POLL_MS);
-  }
 
-  poll();
-</script>
+    poll();
+  </script>
 </body>
+
 </html>
