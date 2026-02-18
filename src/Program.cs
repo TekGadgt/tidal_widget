@@ -74,22 +74,25 @@ class Program
     {
         var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
 
-        // DIAGNOSTIC: log all sessions so we can see the real Tidal app ID
-        foreach (var s in manager.GetSessions())
-        {
-            var p = await s.TryGetMediaPropertiesAsync();
-            Console.WriteLine("[session] appId=" + s.SourceAppUserModelId + " title=" + p?.Title);
-        }
-
-        var session = manager.GetCurrentSession();
-        if (session == null) return new();
-
+        // Find the right session: prefer Tidal specifically, fall back to current
+        Windows.Media.Control.GlobalSystemMediaTransportControlsSession? session = null;
         if (TidalOnly)
         {
-            string appId = session.SourceAppUserModelId ?? "";
-            if (!appId.Contains("tidal", StringComparison.OrdinalIgnoreCase))
-                return new();
+            foreach (var s in manager.GetSessions())
+            {
+                string id = s.SourceAppUserModelId ?? "";
+                if (id.Contains("tidal", StringComparison.OrdinalIgnoreCase))
+                {
+                    session = s;
+                    break;
+                }
+            }
         }
+        else
+        {
+            session = manager.GetCurrentSession();
+        }
+        if (session == null) return new();
 
         var props = await session.TryGetMediaPropertiesAsync();
         if (props == null) return new();
