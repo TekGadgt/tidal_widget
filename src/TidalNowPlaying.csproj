@@ -6,10 +6,22 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <AssemblyName>TidalNowPlaying</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Suppress the console window on launch — comment out if you want to see logs -->
-    <!-- <ApplicationManifest>app.manifest</ApplicationManifest> -->
+
+    <!-- AppTarget is passed in via dotnet publish -p:AppTarget=Tidal|Spotify|Any -->
+    <!-- AssemblyName and display name are derived from it -->
+    <AppTarget Condition="'$(AppTarget)'==''">Tidal</AppTarget>
+    <AssemblyName>$(AppTarget)NowPlaying</AssemblyName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(AppTarget)'=='Tidal'">
+    <DefineConstants>TARGET_TIDAL</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(AppTarget)'=='Spotify'">
+    <DefineConstants>TARGET_SPOTIFY</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(AppTarget)'=='Any'">
+    <DefineConstants>TARGET_ANY</DefineConstants>
   </PropertyGroup>
 </Project>

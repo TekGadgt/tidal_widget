@@ -3,11 +3,21 @@ name: Build
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
+
+    strategy:
+      matrix:
+        include:
+          - target: Tidal
+            exe: TidalNowPlaying.exe
+          - target: Spotify
+            exe: SpotifyNowPlaying.exe
+          - target: Any
+            exe: AnyNowPlaying.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -17,23 +27,24 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Publish single-file exe
+      - name: Publish ${{ matrix.target }}
         run: |
           dotnet publish src/TidalNowPlaying.csproj `
             -c Release `
             -r win-x64 `
             --self-contained true `
             -p:PublishSingleFile=true `
-            -o publish
+            -p:AppTarget=${{ matrix.target }} `
+            -o publish/${{ matrix.target }}
 
-      - name: Copy widget.html into publish folder
-        run: copy widget.html publish\widget.html
+      - name: Copy widget.html
+        run: copy widget.html publish\${{ matrix.target }}\widget.html
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TidalNowPlaying
+          name: ${{ matrix.target }}NowPlaying
           path: |
-            publish/TidalNowPlaying.exe
-            publish/widget.html
+            publish/${{ matrix.target }}/${{ matrix.exe }}
+            publish/${{ matrix.target }}/widget.html
           retention-days: 30

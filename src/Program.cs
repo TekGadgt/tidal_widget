@@ -8,33 +8,46 @@ using System.Threading.Tasks;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
 
+// ── Target configuration (set at compile time via -p:AppTarget=Tidal|Spotify|Any) ──
+#if TARGET_SPOTIFY
+    #define APP_NAME "Spotify Now Playing"
+    #define APP_FILTER "Spotify.exe"
+    #define FILTER_MODE true
+#elif TARGET_ANY
+    #define APP_NAME "Now Playing"
+    #define APP_FILTER ""
+    #define FILTER_MODE false
+#else // Default: Tidal
+    #define APP_NAME "Tidal Now Playing"
+    #define APP_FILTER "tidal"
+    #define FILTER_MODE true
+#endif
+
 class Program
 {
-    const int Port = 8765;
-    const int PollMs = 2000;
-    const bool TidalOnly = true; // set false to show any media app
+    const int    Port       = 8765;
+    const int    PollMs     = 2000;
+    const string AppName    = APP_NAME;
+    const string AppFilter  = APP_FILTER;
+    const bool   FilterMode = FILTER_MODE;
 
     static volatile TrackInfo current = new();
     static readonly object trackLock = new();
 
     static async Task Main()
     {
-        Console.WriteLine($"Tidal Now Playing → http://localhost:{Port}");
+        Console.WriteLine($"{AppName} → http://localhost:{Port}");
         Console.WriteLine($"  Widget:    http://localhost:{Port}/widget.html");
         Console.WriteLine($"  JSON feed: http://localhost:{Port}/now-playing");
         Console.WriteLine();
 
-        // Start polling SMTC in background
         _ = Task.Run(PollLoop);
 
-        // Start HTTP server
         var listener = new HttpListener();
         listener.Prefixes.Add($"http://localhost:{Port}/");
         listener.Start();
 
-        // Find widget.html next to the exe
-        string exeDir = AppContext.BaseDirectory;
-        string widgetPath = Path.Combine(exeDir, "widget.html");
+        string widgetPath = Path.Combine(AppContext.BaseDirectory, "widget.html");
 
         while (true)
         {
@@ -74,14 +87,14 @@ class Program
     {
         var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
 
-        // Find the right session: prefer Tidal specifically, fall back to current
-        Windows.Media.Control.GlobalSystemMediaTransportControlsSession? session = null;
-        if (TidalOnly)
+        GlobalSystemMediaTransportControlsSession? session = null;
+
+        if (FilterMode)
         {
             foreach (var s in manager.GetSessions())
             {
                 string id = s.SourceAppUserModelId ?? "";
-                if (id.Contains("tidal", StringComparison.OrdinalIgnoreCase))
+                if (id.Contains(AppFilter, StringComparison.OrdinalIgnoreCase))
                 {
                     session = s;
                     break;
@@ -92,6 +105,7 @@ class Program
         {
             session = manager.GetCurrentSession();
         }
+
         if (session == null) return new();
 
         var props = await session.TryGetMediaPropertiesAsync();
@@ -157,7 +171,7 @@ class Program
             {
                 string html = File.Exists(widgetPath)
                     ? File.ReadAllText(widgetPath)
-                    : "<p>widget.html not found — place it next to TidalNowPlaying.exe</p>";
+                    : "<p>widget.html not found — place it next to the .exe</p>";
                 byte[] buf = Encoding.UTF8.GetBytes(html);
                 resp.ContentType = "text/html; charset=utf-8";
                 resp.ContentLength64 = buf.Length;
