@@ -9,19 +9,37 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
-    <!-- AppTarget is passed in via dotnet publish -p:AppTarget=Tidal|Spotify|Any -->
-    <!-- AssemblyName and display name are derived from it -->
+    <!-- AppTarget is passed via -p:AppTarget=Tidal|Spotify|Any -->
     <AppTarget Condition="'$(AppTarget)'==''">Tidal</AppTarget>
     <AssemblyName>$(AppTarget)NowPlaying</AssemblyName>
   </PropertyGroup>
 
+  <!-- Per-target constants -->
   <PropertyGroup Condition="'$(AppTarget)'=='Tidal'">
-    <DefineConstants>TARGET_TIDAL</DefineConstants>
+    <AppDisplayName>Tidal Now Playing</AppDisplayName>
+    <AppFilter>tidal</AppFilter>
+    <AppFilterMode>true</AppFilterMode>
   </PropertyGroup>
   <PropertyGroup Condition="'$(AppTarget)'=='Spotify'">
-    <DefineConstants>TARGET_SPOTIFY</DefineConstants>
+    <AppDisplayName>Spotify Now Playing</AppDisplayName>
+    <AppFilter>Spotify.exe</AppFilter>
+    <AppFilterMode>true</AppFilterMode>
   </PropertyGroup>
   <PropertyGroup Condition="'$(AppTarget)'=='Any'">
-    <DefineConstants>TARGET_ANY</DefineConstants>
+    <AppDisplayName>Now Playing</AppDisplayName>
+    <AppFilter></AppFilter>
+    <AppFilterMode>false</AppFilterMode>
   </PropertyGroup>
+
+  <!-- Generate a Config.cs file with the baked-in constants -->
+  <Target Name="GenerateConfig" BeforeTargets="BeforeBuild">
+    <WriteLinesToFile
+      File="$(IntermediateOutputPath)Config.g.cs"
+      Lines="static class Config { public const string AppName = &quot;$(AppDisplayName)&quot;; public const string AppFilter = &quot;$(AppFilter)&quot;; public const bool FilterMode = $(AppFilterMode); }"
+      Overwrite="true" />
+  </Target>
+
+  <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)Config.g.cs" />
+  </ItemGroup>
 </Project>

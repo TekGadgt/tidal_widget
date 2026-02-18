@@ -8,28 +8,13 @@ using System.Threading.Tasks;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
 
-// ── Target configuration (set at compile time via -p:AppTarget=Tidal|Spotify|Any) ──
-#if TARGET_SPOTIFY
-    #define APP_NAME "Spotify Now Playing"
-    #define APP_FILTER "Spotify.exe"
-    #define FILTER_MODE true
-#elif TARGET_ANY
-    #define APP_NAME "Now Playing"
-    #define APP_FILTER ""
-    #define FILTER_MODE false
-#else // Default: Tidal
-    #define APP_NAME "Tidal Now Playing"
-    #define APP_FILTER "tidal"
-    #define FILTER_MODE true
-#endif
-
 class Program
 {
     const int    Port       = 8765;
     const int    PollMs     = 2000;
-    const string AppName    = APP_NAME;
-    const string AppFilter  = APP_FILTER;
-    const bool   FilterMode = FILTER_MODE;
+    const string AppName    = Config.AppName;
+    const string AppFilter  = Config.AppFilter;
+    const bool   FilterMode = Config.FilterMode;
 
     static volatile TrackInfo current = new();
     static readonly object trackLock = new();
