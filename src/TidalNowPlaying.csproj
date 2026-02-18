@@ -6,40 +6,8 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <AssemblyName>$(AppTarget)NowPlaying</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-
-    <!-- AppTarget is passed via -p:AppTarget=Tidal|Spotify|Any -->
-    <AppTarget Condition="'$(AppTarget)'==''">Tidal</AppTarget>
-    <AssemblyName>$(AppTarget)NowPlaying</AssemblyName>
   </PropertyGroup>
-
-  <!-- Per-target constants -->
-  <PropertyGroup Condition="'$(AppTarget)'=='Tidal'">
-    <AppDisplayName>Tidal Now Playing</AppDisplayName>
-    <AppFilter>tidal</AppFilter>
-    <AppFilterMode>true</AppFilterMode>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(AppTarget)'=='Spotify'">
-    <AppDisplayName>Spotify Now Playing</AppDisplayName>
-    <AppFilter>Spotify.exe</AppFilter>
-    <AppFilterMode>true</AppFilterMode>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(AppTarget)'=='Any'">
-    <AppDisplayName>Now Playing</AppDisplayName>
-    <AppFilter></AppFilter>
-    <AppFilterMode>false</AppFilterMode>
-  </PropertyGroup>
-
-  <!-- Generate a Config.cs file with the baked-in constants -->
-  <Target Name="GenerateConfig" BeforeTargets="BeforeBuild">
-    <WriteLinesToFile
-      File="$(IntermediateOutputPath)Config.g.cs"
-      Lines="static class Config { public const string AppName = &quot;$(AppDisplayName)&quot;; public const string AppFilter = &quot;$(AppFilter)&quot;; public const bool FilterMode = $(AppFilterMode); }"
-      Overwrite="true" />
-  </Target>
-
-  <ItemGroup>
-    <Compile Include="$(IntermediateOutputPath)Config.g.cs" />
-  </ItemGroup>
 </Project>
