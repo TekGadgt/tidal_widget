@@ -61,7 +61,9 @@ async Task PostRouter(HttpListenerContext ctx)
 
     if (path == "/heartbeat")
     {
-        int length = (int)Math.Min(req.ContentLength64, int.MaxValue);
+        // ContentLength64 == -1 means the header was absent; treat as 0-length body.
+        long rawLen = req.ContentLength64;
+        int length = rawLen <= 0 ? 0 : (int)Math.Min(rawLen, int.MaxValue);
         var result = beat.Apply(length);
         resp.StatusCode = result.StatusCode;
         resp.Close();
