@@ -8,9 +8,10 @@ public class ArtFetcher
     private readonly TimeSpan timeout;
     private readonly TimeSpan[] retryDelays;
 
-    private readonly object cacheLock = new();
+    private readonly object gate = new();
     private string? cachedUrl;
     private string? cachedResult;
+    private CancellationTokenSource? inFlight;
 
     public ArtFetcher(
         HttpMessageHandler? handler = null,
@@ -32,18 +33,29 @@ public class ArtFetcher
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https")
             return null;
 
-        lock (cacheLock)
+        CancellationToken outerToken;
+        lock (gate)
         {
             if (url == cachedUrl && cachedResult != null) return cachedResult;
+            inFlight?.Cancel();
+            inFlight = new CancellationTokenSource();
+            outerToken = inFlight.Token;
         }
 
         foreach (var delay in retryDelays)
         {
-            if (delay > TimeSpan.Zero) await Task.Delay(delay);
-            var result = await AttemptOnceAsync(url);
+            if (outerToken.IsCancellationRequested) return null;
+            if (delay > TimeSpan.Zero)
+            {
+                try { await Task.Delay(delay, outerToken); }
+                catch (OperationCanceledException) { return null; }
+            }
+
+            var result = await AttemptOnceAsync(url, outerToken);
+            if (outerToken.IsCancellationRequested) return null;
             if (result != null)
             {
-                lock (cacheLock)
+                lock (gate)
                 {
                     cachedUrl    = url;
                     cachedResult = result;
@@ -54,19 +66,22 @@ public class ArtFetcher
         return null;
     }
 
-    private async Task<string?> AttemptOnceAsync(string url)
+    private async Task<string?> AttemptOnceAsync(string url, CancellationToken outerToken)
     {
-        using var cts = new CancellationTokenSource(timeout);
+        using var perAttempt = CancellationTokenSource.CreateLinkedTokenSource(outerToken);
+        perAttempt.CancelAfter(timeout);
+        var token = perAttempt.Token;
+
         try
         {
-            using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
             if (!resp.IsSuccessStatusCode) return null;
 
-            using var stream = await resp.Content.ReadAsStreamAsync(cts.Token);
+            using var stream = await resp.Content.ReadAsStreamAsync(token);
             using var buf = new MemoryStream();
             var buffer = new byte[16 * 1024];
             int read;
-            while ((read = await stream.ReadAsync(buffer, cts.Token)) > 0)
+            while ((read = await stream.ReadAsync(buffer, token)) > 0)
             {
                 if (buf.Length + read > MaxBytes) return null;
                 buf.Write(buffer, 0, read);

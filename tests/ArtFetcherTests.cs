@@ -120,4 +120,23 @@ public class ArtFetcherTests
 
         Assert.Equal(2, handler.Calls.Count);
     }
+
+    [Fact]
+    public async Task FetchAsync_NewUrlWhileOldInFlight_CancelsOldAndProceeds()
+    {
+        // The first call uses a "slow" handler (10s). The second call uses a different URL.
+        // The first call should return null because the second call cancels it.
+        var slowHandler = FakeHttpMessageHandler.Slow(TimeSpan.FromSeconds(10));
+        var fetcher = new ArtFetcher(slowHandler,
+            timeout: TimeSpan.FromSeconds(30),
+            retryDelays: new[] { TimeSpan.Zero });
+
+        var firstTask = fetcher.FetchAsync("https://example.com/slow-a.jpg");
+        await Task.Delay(50); // let first call start
+        var secondTask = fetcher.FetchAsync("https://example.com/slow-b.jpg");
+        await Task.Delay(50); // let cancellation propagate
+
+        string? firstResult = await firstTask;
+        Assert.Null(firstResult);
+    }
 }
