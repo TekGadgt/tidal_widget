@@ -11,6 +11,7 @@ public class IngestHandler
     private readonly State state;
     private readonly ArtFetcher fetcher;
     private readonly IClock clock;
+    private readonly object artLock = new();
     private string lastSeenArtUrl = "";
 
     public IngestHandler(State state, ArtFetcher fetcher, IClock clock)
@@ -45,7 +46,13 @@ public class IngestHandler
         }
 
         string newArtUrl = payload.ArtUrl ?? "";
-        bool   artChanged = newArtUrl != lastSeenArtUrl;
+
+        bool artChanged;
+        lock (artLock)
+        {
+            artChanged = newArtUrl != lastSeenArtUrl;
+            if (artChanged) lastSeenArtUrl = newArtUrl;
+        }
 
         var info = new TrackInfo
         {
@@ -57,17 +64,21 @@ public class IngestHandler
         };
         state.Update(info, clock.UtcNow());
 
-        if (artChanged)
+        if (artChanged && !string.IsNullOrEmpty(newArtUrl))
         {
-            lastSeenArtUrl = newArtUrl;
-            if (!string.IsNullOrEmpty(newArtUrl))
+            string fetchUrl = newArtUrl;
+            _ = Task.Run(async () =>
             {
-                _ = Task.Run(async () =>
+                string? art = await fetcher.FetchAsync(fetchUrl);
+                if (art == null) return;
+                // Re-check that we are still the current art_url before applying — a newer
+                // ingest may have arrived while this fetch was in flight.
+                lock (artLock)
                 {
-                    string? art = await fetcher.FetchAsync(newArtUrl);
-                    if (art != null) state.SetArt(art);
-                });
-            }
+                    if (fetchUrl != lastSeenArtUrl) return;
+                }
+                state.SetArt(art);
+            });
         }
 
         return new IngestResult(200);
