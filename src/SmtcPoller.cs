@@ -32,14 +32,16 @@ public class SmtcPoller
             try
             {
                 var info = await GetMediaInfo();
+                TrackInfo? fired = null;
                 lock (trackLock)
                 {
                     if (info.Title != current.Title || info.Artist != current.Artist || info.IsPlaying != current.IsPlaying)
                     {
                         current = info;
-                        onChange(info);
+                        fired = info;
                     }
                 }
+                if (fired != null) onChange(fired);
             }
             catch (Exception ex)
             {
@@ -88,7 +90,7 @@ public class SmtcPoller
             if (thumb != null)
             {
                 using var stream = await thumb.OpenReadAsync();
-                var reader = new DataReader(stream);
+                using var reader = new DataReader(stream);
                 await reader.LoadAsync((uint)stream.Size);
                 byte[] bytes = new byte[stream.Size];
                 reader.ReadBytes(bytes);

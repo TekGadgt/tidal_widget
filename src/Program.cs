@@ -22,4 +22,6 @@ var poller = new SmtcPoller(PollMs, AppFilter, FilterMode, info =>
 string widgetPath = Path.Combine(AppContext.BaseDirectory, "widget.html");
 var server = new WidgetServer(Port, widgetPath, () => poller.Current);
 
-await Task.WhenAny(server.RunAsync(), poller.RunAsync());
+var finished = await Task.WhenAny(server.RunAsync(), poller.RunAsync());
+try { await finished; }
+catch (Exception ex) { Console.WriteLine($"Fatal: {ex.Message}"); Environment.Exit(1); }
