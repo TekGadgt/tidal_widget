@@ -18,4 +18,21 @@ public class HeartbeatHandlerTests
         Assert.Equal(clock.Now, state.LastIngestAt);
         Assert.Equal("X", state.Current.Title); // current unchanged
     }
+
+    [Fact]
+    public void Apply_NonEmptyBody_Returns400AndDoesNotRefresh()
+    {
+        var state = new State();
+        var prev = new DateTime(2026, 5, 10, 11, 0, 0, DateTimeKind.Utc);
+        state.Update(new TrackInfo { Title = "X" }, prev);
+
+        var clock = new TestClock(new DateTime(2026, 5, 10, 12, 0, 0, DateTimeKind.Utc));
+        var handler = new HeartbeatHandler(state, clock);
+
+        var result = handler.Apply(bodyLength: 42);
+
+        Assert.Equal(400, result.StatusCode);
+        Assert.Equal(prev, state.LastIngestAt); // not refreshed
+        Assert.Equal("X", state.Current.Title);
+    }
 }
