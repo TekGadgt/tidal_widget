@@ -35,4 +35,16 @@ public class ArtFetcherTests
         Assert.Null(result);
         Assert.Empty(handler.Calls);
     }
+
+    [Fact]
+    public async Task FetchAsync_ResponseExceedsSizeCap_ReturnsNull()
+    {
+        byte[] big = new byte[6 * 1024 * 1024]; // 6 MB > 5 MB cap
+        var handler = FakeHttpMessageHandler.AlwaysReturn(big);
+        var fetcher = new ArtFetcher(handler);
+
+        string? result = await fetcher.FetchAsync("https://example.com/big.jpg");
+
+        Assert.Null(result);
+    }
 }
