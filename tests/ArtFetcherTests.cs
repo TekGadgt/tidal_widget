@@ -62,4 +62,34 @@ public class ArtFetcherTests
         Assert.Null(result);
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2), $"Took {sw.Elapsed} — timeout did not trip.");
     }
+
+    [Fact]
+    public async Task FetchAsync_FailsTwiceThenSucceeds_ReturnsResult()
+    {
+        byte[] body = new byte[] { 0xFF, 0xD8, 0xFF };
+        var handler = FakeHttpMessageHandler.FailThenSucceed(failTimes: 2, body: body);
+        // tight retry delays so test finishes quickly
+        var fetcher = new ArtFetcher(handler,
+            timeout: TimeSpan.FromSeconds(5),
+            retryDelays: new[] { TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(1) });
+
+        string? result = await fetcher.FetchAsync("https://example.com/flaky.jpg");
+
+        Assert.NotNull(result);
+        Assert.Equal(3, handler.Calls.Count);
+    }
+
+    [Fact]
+    public async Task FetchAsync_AllAttemptsFail_ReturnsNull()
+    {
+        var handler = FakeHttpMessageHandler.AlwaysFail();
+        var fetcher = new ArtFetcher(handler,
+            timeout: TimeSpan.FromSeconds(5),
+            retryDelays: new[] { TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(1) });
+
+        string? result = await fetcher.FetchAsync("https://example.com/dead.jpg");
+
+        Assert.Null(result);
+        Assert.Equal(3, handler.Calls.Count);
+    }
 }

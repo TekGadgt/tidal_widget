@@ -28,7 +28,13 @@ public class ArtFetcher
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https")
             return null;
 
-        return await AttemptOnceAsync(url);
+        foreach (var delay in retryDelays)
+        {
+            if (delay > TimeSpan.Zero) await Task.Delay(delay);
+            var result = await AttemptOnceAsync(url);
+            if (result != null) return result;
+        }
+        return null;
     }
 
     private async Task<string?> AttemptOnceAsync(string url)
