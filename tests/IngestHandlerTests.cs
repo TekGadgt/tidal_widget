@@ -3,6 +3,27 @@ namespace TidalNowPlaying.Tests;
 public class IngestHandlerTests
 {
     [Fact]
+    public async Task ApplyAsync_BodyExceeds16KB_Returns413AndDoesNotTouchState()
+    {
+        var state = new State();
+        var initialTime = new DateTime(2026, 5, 10, 11, 0, 0, DateTimeKind.Utc);
+        state.Update(new TrackInfo { Title = "Untouched" }, initialTime);
+
+        var fetcher = new ArtFetcher(FakeHttpMessageHandler.AlwaysFail(),
+                                     retryDelays: new[] { TimeSpan.Zero });
+        var clock = new TestClock(new DateTime(2026, 5, 10, 12, 0, 0, DateTimeKind.Utc));
+        var handler = new IngestHandler(state, fetcher, clock);
+
+        string huge = new string('x', 17 * 1024); // 17 KB > 16 KB cap
+
+        var result = await handler.ApplyAsync(huge);
+
+        Assert.Equal(413, result.StatusCode);
+        Assert.Equal("Untouched", state.Current.Title);
+        Assert.Equal(initialTime, state.LastIngestAt);
+    }
+
+    [Fact]
     public async Task ApplyAsync_MalformedJson_ClearsStateAndReturns400()
     {
         var state = new State();
