@@ -10,7 +10,22 @@ const HEARTBEAT_MS = 5000;
 let lastSent = { state: 'none', title: '', artist: '', album: '', isPlaying: false, artUrl: '' };
 
 function findAudio() {
-  return document.querySelector('audio');
+  // Tidal uses Media Source Extensions — the <audio> element may exist with
+  // no `src` attribute, or be a <video> element. Check both.
+  return document.querySelector('audio, video');
+}
+
+function isCurrentlyPlaying(audio) {
+  // Prefer the mediaSession playbackState the site explicitly sets, since
+  // Tidal may keep an <audio> element around in `paused` state during track
+  // load even though playback is occurring.
+  const ps = navigator.mediaSession && navigator.mediaSession.playbackState;
+  if (ps === 'playing') return true;
+  if (ps === 'paused') return false;
+  // Fall back to the audio element's own state if available.
+  if (audio && typeof audio.paused === 'boolean') return !audio.paused;
+  // Default: if metadata is populated but nothing else tells us, assume playing.
+  return true;
 }
 
 function pickArtUrl(metadata) {
@@ -27,17 +42,18 @@ function pickArtUrl(metadata) {
 function snapshot() {
   try {
     const md = navigator.mediaSession && navigator.mediaSession.metadata;
-    const audio = findAudio();
-    const audioReady = !!(audio && audio.src);
-    if (!md || !audioReady) {
+    // mediaSession.metadata is the authoritative "track loaded" signal —
+    // Tidal sets it via MSE before the <audio> element gets a `src` attribute.
+    if (!md) {
       return { state: 'none', title: '', artist: '', album: '', isPlaying: false, artUrl: '' };
     }
+    const audio = findAudio();
     return {
       state: 'track',
       title: md.title || '',
       artist: md.artist || '',
       album: md.album || '',
-      isPlaying: !!(audio && !audio.paused),
+      isPlaying: isCurrentlyPlaying(audio),
       artUrl: pickArtUrl(md),
     };
   } catch (e) {
