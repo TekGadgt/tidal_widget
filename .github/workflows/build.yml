@@ -68,3 +68,14 @@ jobs:
             publish/${{ matrix.target }}/${{ matrix.target }}NowPlaying.exe
             publish/${{ matrix.target }}/widget.html
           retention-days: 30
+
+  test-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore + test
+        run: dotnet test tests/TidalNowPlaying.Browser.Tests.csproj -c Release --logger "console;verbosity=normal"
+
