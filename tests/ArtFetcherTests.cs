@@ -18,4 +18,21 @@ public class ArtFetcherTests
         string expectedBase64 = Convert.ToBase64String(body);
         Assert.Equal($"data:image/jpeg;base64,{expectedBase64}", result);
     }
+
+    [Theory]
+    [InlineData("http://example.com/art.jpg")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://example.com/art.jpg")]
+    [InlineData("not-a-url")]
+    [InlineData("")]
+    public async Task FetchAsync_NonHttpsScheme_ReturnsNullWithoutFetching(string url)
+    {
+        var handler = FakeHttpMessageHandler.AlwaysReturn(new byte[] { 1, 2, 3 });
+        var fetcher = new ArtFetcher(handler);
+
+        string? result = await fetcher.FetchAsync(url);
+
+        Assert.Null(result);
+        Assert.Empty(handler.Calls);
+    }
 }

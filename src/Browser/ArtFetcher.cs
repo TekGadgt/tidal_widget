@@ -11,6 +11,9 @@ public class ArtFetcher
 
     public async Task<string?> FetchAsync(string url)
     {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https")
+            return null;
+
         using var resp = await http.GetAsync(url);
         if (!resp.IsSuccessStatusCode) return null;
         byte[] bytes = await resp.Content.ReadAsByteArrayAsync();
