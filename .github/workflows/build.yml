@@ -61,7 +61,7 @@ jobs:
         run: copy widget.html publish\${{ matrix.target }}\widget.html
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}NowPlaying
           path: |
@@ -98,7 +98,7 @@ jobs:
             -o publish/browser/${{ matrix.rid }}
       - name: Bundle widget.html
         run: cp widget.html publish/browser/${{ matrix.rid }}/widget.html
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: TidalNowPlaying-Browser-${{ matrix.rid }}
           path: publish/browser/${{ matrix.rid }}/
@@ -109,7 +109,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Zip extension
         run: cd extension && zip -r ../tidal-extension.zip .
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: tidal-extension
           path: tidal-extension.zip
@@ -124,7 +124,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with: { path: artifacts }
       - name: Stage release zips
         run: |
