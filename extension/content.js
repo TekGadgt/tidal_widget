@@ -1,10 +1,9 @@
 // Tidal Now Playing — content script.
-// Reads navigator.mediaSession.metadata + the page's <audio> element, then:
-//   - POSTs /ingest when state changes
-//   - POSTs /heartbeat every 5 s
-//   - sendBeacon /ingest cleared on pagehide
+// Reads navigator.mediaSession.metadata + the page's <audio> element.
+// Cannot fetch loopback directly from the page's network context (Chrome's
+// Private Network Access policy blocks it even with host_permissions), so
+// all network I/O is delegated to the service worker via runtime.sendMessage.
 
-const SERVER = 'http://127.0.0.1:8765';
 const POLL_MS = 500;
 const HEARTBEAT_MS = 5000;
 
@@ -68,17 +67,25 @@ function payloadFromSnapshot(s) {
 
 const CLEARED_PAYLOAD = { title: '', artist: '', album: '', is_playing: false, art_url: '' };
 
-function postIngest(payload) {
-  fetch(`${SERVER}/ingest`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    keepalive: false,
-  }).catch(() => { /* silently ignore; next event or heartbeat retries */ });
+function sendIngest(payload) {
+  try {
+    chrome.runtime.sendMessage({ type: 'ingest', payload }, () => {
+      // Swallow runtime.lastError noise — fire-and-forget; next event/heartbeat retries.
+      void chrome.runtime.lastError;
+    });
+  } catch (e) {
+    // Service worker may be tearing down during extension reload; ignore.
+  }
 }
 
-function postHeartbeat() {
-  fetch(`${SERVER}/heartbeat`, { method: 'POST' }).catch(() => { /* ignore */ });
+function sendHeartbeat() {
+  try {
+    chrome.runtime.sendMessage({ type: 'heartbeat' }, () => {
+      void chrome.runtime.lastError;
+    });
+  } catch (e) {
+    // ignore
+  }
 }
 
 function tick() {
@@ -86,12 +93,12 @@ function tick() {
 
   if (cur.state === 'track') {
     if (snapshotsDiffer(cur, lastSent)) {
-      postIngest(payloadFromSnapshot(cur));
+      sendIngest(payloadFromSnapshot(cur));
       lastSent = cur;
     }
   } else {
     if (lastSent.state === 'track') {
-      postIngest(CLEARED_PAYLOAD);
+      sendIngest(CLEARED_PAYLOAD);
       lastSent = cur;
     }
   }
@@ -101,7 +108,7 @@ function tick() {
 setInterval(tick, POLL_MS);
 
 // Heartbeat loop.
-setInterval(postHeartbeat, HEARTBEAT_MS);
+setInterval(sendHeartbeat, HEARTBEAT_MS);
 
 // React faster to play/pause by recomputing on audio events.
 function attachAudioListeners(audio) {
@@ -115,11 +122,15 @@ audioObserver.observe(document.documentElement, { childList: true, subtree: true
 attachAudioListeners(findAudio());
 
 // Send a cleared ingest on tab close / navigation away.
+// (sendBeacon to loopback is blocked by PNA the same way fetch is, so we use
+// runtime.sendMessage too — best-effort during pagehide. The server's 10 s
+// idle timeout is the reliable fallback if this doesn't make it through.)
 window.addEventListener('pagehide', () => {
-  navigator.sendBeacon(
-    `${SERVER}/ingest`,
-    new Blob([JSON.stringify(CLEARED_PAYLOAD)], { type: 'application/json' })
-  );
+  try {
+    chrome.runtime.sendMessage({ type: 'ingest', payload: CLEARED_PAYLOAD }, () => {
+      void chrome.runtime.lastError;
+    });
+  } catch (e) { /* ignore */ }
 });
 
 console.log('[TidalNowPlaying] content script loaded');

@@ -1,12 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Tidal Now Playing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Forwards Tidal web playback state to the local Tidal Now Playing companion server.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "service_worker.js"
   },
   "host_permissions": [
     "http://127.0.0.1/*"
