@@ -28,6 +28,7 @@ public class WidgetServer
     {
         var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Prefixes.Add($"http://localhost:{port}/");
         listener.Start();
         cts.Token.Register(() => { try { listener.Stop(); } catch { } });
 
@@ -103,7 +104,8 @@ public class WidgetServer
 
             if (method == "POST" && postHandler != null)
             {
-                await postHandler(ctx);
+                try { await postHandler(ctx); }
+                finally { try { ctx.Response.Close(); } catch { } }
                 return;
             }
 
