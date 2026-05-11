@@ -26,10 +26,10 @@ jobs:
             filter_mode: "false"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
@@ -61,10 +61,92 @@ jobs:
         run: copy widget.html publish\${{ matrix.target }}\widget.html
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}NowPlaying
           path: |
             publish/${{ matrix.target }}/${{ matrix.target }}NowPlaying.exe
             publish/${{ matrix.target }}/widget.html
           retention-days: 30
+
+  test-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore + test
+        run: dotnet test tests/TidalNowPlaying.Browser.Tests.csproj -c Release --logger "console;verbosity=normal"
+
+  build-browser-server:
+    runs-on: ubuntu-latest
+    needs: [test-browser]
+    strategy:
+      matrix:
+        rid: [win-x64, osx-arm64, linux-x64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish ${{ matrix.rid }}
+        run: |
+          dotnet publish src/Browser/TidalNowPlaying.Browser.csproj \
+            -c Release -r ${{ matrix.rid }} \
+            --self-contained true -p:PublishSingleFile=true \
+            -o publish/browser/${{ matrix.rid }}
+      - name: Bundle widget.html
+        run: cp widget.html publish/browser/${{ matrix.rid }}/widget.html
+      - uses: actions/upload-artifact@v7
+        with:
+          name: TidalNowPlaying-Browser-${{ matrix.rid }}
+          path: publish/browser/${{ matrix.rid }}/
+
+  package-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Zip extension
+        run: cd extension && zip -r ../tidal-extension.zip .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tidal-extension
+          path: tidal-extension.zip
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build, build-browser-server, package-extension]
+    if: always()
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with: { path: artifacts }
+      - name: Stage release zips
+        run: |
+          mkdir -p release
+          for dir in artifacts/*/; do
+            name=$(basename "$dir")
+            if [ "$name" = "tidal-extension" ]; then
+              cp "$dir"*.zip "release/${name}.zip"
+            else
+              case "$name" in
+                *Browser-osx-*|*Browser-linux-*)
+                  find "$dir" -maxdepth 1 -type f ! -name '*.html' -exec chmod +x {} \;
+                  ;;
+              esac
+              (cd "$dir" && zip -r "../../release/${name}.zip" .)
+            fi
+          done
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: latest
+          name: Latest build
+          prerelease: false
+          make_latest: true
+          files: release/*.zip
+

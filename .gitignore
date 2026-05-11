@@ -1,0 +1,24 @@
+# Local Claude Code settings (project-scoped, not shared)
+.claude/
+
+# .NET build output
+bin/
+obj/
+
+# .NET publish output
+publish/
+
+# Test results
+TestResults/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+
+# macOS
+.DS_Store
+
+# Worktree dir (if ever used)
+.worktrees/
+.claude/worktrees/
