@@ -47,4 +47,19 @@ public class ArtFetcherTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public async Task FetchAsync_RequestExceedsTimeout_ReturnsNull()
+    {
+        var handler = FakeHttpMessageHandler.Slow(TimeSpan.FromSeconds(10));
+        // single zero-delay retry slot so AttemptOnce actually runs once and engages the timeout
+        var fetcher = new ArtFetcher(handler, timeout: TimeSpan.FromMilliseconds(200), retryDelays: new[] { TimeSpan.Zero });
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        string? result = await fetcher.FetchAsync("https://example.com/slow.jpg");
+        sw.Stop();
+
+        Assert.Null(result);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2), $"Took {sw.Elapsed} — timeout did not trip.");
+    }
 }

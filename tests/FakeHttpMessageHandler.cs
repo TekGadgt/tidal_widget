@@ -47,6 +47,13 @@ public class FakeHttpMessageHandler : HttpMessageHandler
     {
         int idx = Calls.Count;
         Calls.Add(request);
-        return await respond(request, idx);
+        var responseTask = respond(request, idx);
+        var cancelTask = Task.Delay(Timeout.Infinite, cancellationToken);
+        var completed = await Task.WhenAny(responseTask, cancelTask);
+        if (completed == cancelTask)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        return await responseTask;
     }
 }
