@@ -190,17 +190,24 @@ Two browser policies interact here:
 1. **Standard CORS.** A `POST` with `Content-Type: application/json` is not a "simple request" and triggers a preflight `OPTIONS`. The server must respond with the matching `Access-Control-Allow-*` headers.
 2. **Private Network Access (PNA).** Chrome blocks any fetch from a public origin (anywhere reachable over the public internet, including `https://tidal.com`) to a private address space (loopback `127.0.0.1`, link-local, RFC 1918) unless the server explicitly opts in by returning `Access-Control-Allow-Private-Network: true` on the preflight. Without this header the browser rejects the request with *"Permission was denied for this request to access the `loopback` address space"* before the actual POST is even attempted.
 
-`WidgetServer` handles preflight `OPTIONS` for `/ingest` and `/heartbeat` with these response headers:
+`WidgetServer` inspects the `Origin` header on every request:
+
+- If `Origin` starts with `chrome-extension://` (i.e. the request is from our extension's service worker), the server emits CORS approval headers.
+- If `Origin` is unset (same-origin request — e.g., the widget HTML loaded from `127.0.0.1:8765` polling `/now-playing` on the same origin, or a non-browser local client), no CORS headers are emitted; the browser/runtime doesn't need them.
+- If `Origin` is anything else (any public HTTPS site the user happens to have open), no CORS headers are emitted, and an OPTIONS preflight for `/ingest` or `/heartbeat` returns **403 Forbidden**. This closes the cross-site exfil hole that an earlier `Access-Control-Allow-Origin: *` policy would have left open.
+
+For extension-origin preflights, the response headers are:
 
 | Response header | Value |
 |---|---|
-| `Access-Control-Allow-Origin` | `*` |
+| `Access-Control-Allow-Origin` | echoes the request's `Origin` (a specific `chrome-extension://<id>` URL) |
+| `Vary` | `Origin` (so caches don't reuse this response for other origins) |
 | `Access-Control-Allow-Methods` | `POST, OPTIONS` |
 | `Access-Control-Allow-Headers` | `Content-Type` |
 | `Access-Control-Allow-Private-Network` | `true` |
 | `Access-Control-Max-Age` | `600` (cache preflight for 10 minutes) |
 
-`GET /now-playing` continues to send `Access-Control-Allow-Origin: *` as today; no preflight is needed for that (the existing widget polls it with a plain GET, no special headers).
+`GET /now-playing` and `GET /widget.html` are designed to be served same-origin (the widget HTML is loaded from the same `http://127.0.0.1:8765` origin it polls). They emit `Access-Control-Allow-Origin` only when the request comes from a `chrome-extension://` origin; for same-origin browser requests no CORS headers are needed.
 
 **Why the service worker is required even with these headers.** Content scripts in MV3 run in the *page's* network context, not the extension's, so their fetches are treated as coming from `https://tidal.com` for PNA purposes. The exemption Chrome grants to extensions with declared `host_permissions` only applies to fetches that originate from the **extension's origin** (`chrome-extension://...`), which means background contexts: service workers, popups, options pages. By routing all fetches through `service_worker.js`, the requests inherit the extension origin and get the PNA exemption — which combined with the server-side `Access-Control-Allow-Private-Network: true` makes the round-trip succeed.
 
@@ -421,7 +428,8 @@ A new xUnit test project (`net8.0`) covering:
 | `IngestHandler` — body exceeds 16 KB | Returns 413, no state change, no `lastIngestAt` refresh. |
 | `HeartbeatHandler` — empty body | Refreshes `lastIngestAt`, does not touch `current`, returns 204. |
 | `HeartbeatHandler` — non-empty body | Returns 400, does not touch `current`, does not refresh `lastIngestAt`. |
-| CORS preflight — `OPTIONS /ingest`, `OPTIONS /heartbeat` | Responds 204 with `Access-Control-Allow-Origin`, `Allow-Methods: POST, OPTIONS`, `Allow-Headers: Content-Type`, `Allow-Private-Network: true`, and `Max-Age: 600`. |
+| CORS preflight from extension origin — `OPTIONS /ingest`, `OPTIONS /heartbeat` with `Origin: chrome-extension://...` | Responds 204 with `Access-Control-Allow-Origin` echoing the origin, plus `Allow-Methods: POST, OPTIONS`, `Allow-Headers: Content-Type`, `Allow-Private-Network: true`, and `Max-Age: 600`. |
+| CORS preflight from public origin — `OPTIONS /ingest`, `OPTIONS /heartbeat` with `Origin: https://evil.example.com` | Responds 403 with **no** `Access-Control-Allow-Origin` or `Access-Control-Allow-Private-Network` headers. |
 | `ArtFetcher` — `https://` URL, fetch succeeds first try | Returns base64 data URL; cache populated. |
 | `ArtFetcher` — `https://` URL, fetch fails first, succeeds on retry | Final result populated; retry schedule (250ms / 1s / 3s) respected. |
 | `ArtFetcher` — `https://` URL, all retries fail | Returns empty; cache not poisoned with bad data. |
