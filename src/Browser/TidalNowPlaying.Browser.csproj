@@ -13,4 +13,7 @@
   <ItemGroup>
     <Compile Include="..\Shared\**\*.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TidalNowPlaying.Browser.Tests" />
+  </ItemGroup>
 </Project>
