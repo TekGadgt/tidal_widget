@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
+using TidalNowPlaying;
 
 class Program
 {
@@ -171,13 +172,4 @@ class Program
         }
         catch { }
     }
-}
-
-record TrackInfo
-{
-    public string Title     { get; init; } = "";
-    public string Artist    { get; init; } = "";
-    public string Album     { get; init; } = "";
-    public bool   IsPlaying { get; init; } = false;
-    public string Art       { get; init; } = "";
 }
