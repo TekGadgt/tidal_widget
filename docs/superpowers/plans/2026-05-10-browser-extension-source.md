@@ -2696,8 +2696,8 @@ Append the following job to `.github/workflows/build.yml` (keeping the existing 
   test-browser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
       - name: Restore + test
@@ -2728,8 +2728,8 @@ git commit -m "ci: add test-browser job"
       matrix:
         rid: [win-x64, osx-arm64, linux-x64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
       - name: Publish ${{ matrix.rid }}
@@ -2740,7 +2740,7 @@ git commit -m "ci: add test-browser job"
             -o publish/browser/${{ matrix.rid }}
       - name: Bundle widget.html
         run: cp widget.html publish/browser/${{ matrix.rid }}/widget.html
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: TidalNowPlaying-Browser-${{ matrix.rid }}
           path: publish/browser/${{ matrix.rid }}/
@@ -2766,10 +2766,10 @@ git commit -m "ci: add build-browser-server matrix (win/mac/linux)"
   package-extension:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Zip extension
         run: cd extension && zip -r ../tidal-extension.zip .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: tidal-extension
           path: tidal-extension.zip
@@ -2802,7 +2802,7 @@ git commit -m "ci: add package-extension job"
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with: { path: artifacts }
       - name: Stage release zips
         run: |
@@ -2821,7 +2821,7 @@ git commit -m "ci: add package-extension job"
             fi
           done
           ls -la release/
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: latest
           name: Latest build
