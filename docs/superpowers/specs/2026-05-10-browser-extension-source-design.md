@@ -26,34 +26,37 @@ Add a second data-source path to the Tidal Now Playing widget: a Chrome (Manifes
 ## Architecture
 
 ```
-┌─────────────────────────┐
-│  Chrome tab (tidal.com) │
-│  ┌───────────────────┐  │
-│  │ content.js        │──┼── POST /ingest ──┐
-│  │  - reads media    │  │  POST /heartbeat │
-│  │    session +      │  │                  │
-│  │    <audio> elem   │  │                  ▼
-│  └───────────────────┘  │  ┌────────────────────────────┐
-│  ┌───────────────────┐  │  │ TidalNowPlaying.Browser    │
-│  │ service_worker.js │──┼─▶│  HttpListener :8765        │
-│  │  - tab close →    │  │  │   /ingest    (POST)        │
-│  │    POST clear     │  │  │   /heartbeat (POST)        │
-│  └───────────────────┘  │  │   /now-playing (GET, JSON) │
-└─────────────────────────┘  │   /widget.html (GET)       │
-                             │                            │
-                             │  - holds current TrackInfo │
-                             │  - fetches art URL → bytes │
-                             │    → base64 → in-memory    │
-                             │  - 10s idle timeout clears │
-                             │    current TrackInfo       │
-                             └────────────────────────────┘
-                                          │
-                                          │ GET /widget.html
-                                          ▼
-                             ┌────────────────────────────┐
-                             │ OBS Browser Source         │
-                             │  polls /now-playing        │
-                             └────────────────────────────┘
+┌─────────────────────────────┐
+│  Chrome tab (tidal.com)     │
+│  ┌───────────────────────┐  │
+│  │ content.js            │──┼── POST /ingest   (on change) ──┐
+│  │  - reads media        │──┼── POST /heartbeat (every 5s)  ─┤
+│  │    session +          │  │                                │
+│  │    <audio> elem       │──┼── sendBeacon /ingest (cleared, ┤
+│  │  - on pagehide →      │  │   on pagehide/tab close)       │
+│  │    sendBeacon cleared │  │                                ▼
+│  └───────────────────────┘  │  ┌────────────────────────────────┐
+└─────────────────────────────┘  │ TidalNowPlaying.Browser        │
+                                 │  HttpListener 127.0.0.1:8765   │
+                                 │   /ingest    (POST + OPTIONS)  │
+                                 │   /heartbeat (POST + OPTIONS)  │
+                                 │   /now-playing (GET, JSON)     │
+                                 │   /widget.html (GET)           │
+                                 │                                │
+                                 │  - holds current TrackInfo     │
+                                 │  - fetches art URL (https,     │
+                                 │    capped size, timeout)       │
+                                 │    → base64 → in-memory        │
+                                 │  - 10s idle timeout clears     │
+                                 │    current TrackInfo           │
+                                 └────────────────────────────────┘
+                                                │
+                                                │ GET /widget.html
+                                                ▼
+                                 ┌────────────────────────────────┐
+                                 │ OBS Browser Source             │
+                                 │  polls /now-playing            │
+                                 └────────────────────────────────┘
 ```
 
 Two independent products in the same repo:
@@ -93,9 +96,9 @@ tidal_widget/
 │       └── ArtFetcher.cs                    (URL → bytes → base64; retry + cache)
 │
 └── extension/
-    ├── manifest.json                    (MV3, host_permissions: tidal.com + 127.0.0.1:8765)
-    ├── content.js                       (reads mediaSession + <audio>; POSTs ingest + heartbeat)
-    ├── service_worker.js                (chrome.tabs.onRemoved → POST cleared ingest)
+    ├── manifest.json                    (MV3, host_permissions: http://127.0.0.1/* + Tidal hosts)
+    ├── content.js                       (reads mediaSession + <audio>; POSTs ingest + heartbeat;
+    │                                     pagehide → sendBeacon cleared ingest)
     └── icons/                           (16/48/128 png — placeholder ok for v1)
 ```
 
@@ -105,7 +108,7 @@ tidal_widget/
 - **`Shared/TrackInfo.cs`** — shared record. Same JSON serialization for both paths.
 - **Windows side** — `Program.cs` becomes a tiny wire-up file; SMTC polling moves into `SmtcPoller.cs`. Outward behavior identical to today.
 - **Browser side** — `Program.cs` wires up the ingest + heartbeat handlers, the `ArtFetcher`, the `WidgetServer`, and the 10-second idle timer. Handlers are separated by responsibility.
-- **Extension** — `content.js` does the actual reading and POSTing. `service_worker.js` exists only for the tab-close clear signal (MV3 service workers go idle, so they can't hold polling state — that lives in the content script).
+- **Extension** — `content.js` does all the work: reading, POSTing, heartbeating, and emitting the tab-close clear via `navigator.sendBeacon` on `pagehide`. There is **no background service worker** in v1. Earlier drafts used a service worker with `chrome.tabs.onRemoved`, but that approach is brittle in MV3: `onRemoved` doesn't provide the closed tab's URL, MV3 service workers are suspended after ~30s of inactivity (losing any in-memory tab-tracking map), and the URL→tabId mapping would need to live in `chrome.storage.local` to survive. The `pagehide`+`sendBeacon` path is simpler, more reliable, and avoids the service-worker lifecycle entirely. Idle timeout (10s) catches the cases where `pagehide` doesn't fire (e.g., browser crash, force-kill, extension disabled mid-session).
 
 ## Data Flow & Contracts
 
@@ -145,16 +148,48 @@ A "cleared" state (tab close, no track playing) is signaled via `POST /ingest` w
 
 ### Extension → server triggers
 
-`content.js` (runs on `listen.tidal.com` and `tidal.com`):
+`content.js` (runs on `listen.tidal.com` and `tidal.com`) is the only moving piece. It maintains an in-memory `lastSentState` snapshot to decide when a POST is warranted.
 
-- Polls `navigator.mediaSession.metadata` every 500ms. On any field change (title/artist/album/artwork) → `POST /ingest` immediately.
-- Listens to the page's `<audio>` element `play`/`pause` events → `POST /ingest` immediately with updated `is_playing`.
-- `setInterval(5000)` → `POST /heartbeat`.
-- POSTs are fire-and-forget. Failures (server down, network error) are silently ignored; the next event or heartbeat retries.
+On each 500ms `mediaSession`/audio poll, it computes the *current* state:
 
-`service_worker.js`:
+- `state = 'track'` if `navigator.mediaSession.metadata` is non-null **and** the page's `<audio>` element has a `src`/duration.
+- `state = 'none'` otherwise.
 
-- Listens to `chrome.tabs.onRemoved`. When the closed tab was a Tidal tab, → `POST /ingest` with cleared body.
+Then:
+
+- If `state == 'track'`: build the payload `{title, artist, album, is_playing, art_url}` from `mediaSession.metadata` + `audio.paused`. If any field differs from `lastSentState`, `POST /ingest` and update `lastSentState`.
+- If `state == 'none'` **and** `lastSentState` was `'track'` (i.e. metadata transitioned populated → null, or audio element disappeared): `POST /ingest` with cleared body (all string fields empty, `is_playing: false`) and update `lastSentState` to `'none'`. This is the case Codex flagged — without it, a user who closes the Tidal player but keeps the tab open would leave the widget pinned to the last track indefinitely (heartbeats refresh `lastIngestAt`, so idle timeout never fires).
+- If `state == 'none'` **and** `lastSentState` was already `'none'` (page just loaded, no track ever played): no `/ingest` POST.
+
+Independently of the poll:
+
+- `setInterval(5000)` → `POST /heartbeat` regardless of state.
+- Audio element `play`/`pause` events → mirrored into the polling-state update (i.e. trigger an out-of-band recompute), so play/pause reacts faster than 500ms.
+- `window.addEventListener('pagehide', ...)` → `navigator.sendBeacon('/ingest', clearedBody)`. `sendBeacon` is designed to survive page teardown where async `fetch()` would be cancelled; it's the right primitive for "fire one last request as the tab closes."
+
+All POSTs are fire-and-forget. Failures (server down, network error) are silently ignored; the next event or heartbeat retries.
+
+### Cross-origin handling (CORS preflight)
+
+The Tidal page is HTTPS; the local server is HTTP on `127.0.0.1`. Chrome treats `127.0.0.1` as a *potentially trustworthy* origin, so the **mixed-content** prohibition is waived for HTTPS → loopback fetches.
+
+CORS, however, is still enforced. Content scripts in MV3 cannot bypass CORS via `host_permissions` (only background fetches can). A `POST` with `Content-Type: application/json` is not a "simple request" and triggers a preflight `OPTIONS`. The server must handle it.
+
+`WidgetServer` adds OPTIONS handling for `/ingest` and `/heartbeat`:
+
+| Response header | Value |
+|---|---|
+| `Access-Control-Allow-Origin` | `*` (or echo the request `Origin`; `*` is fine since the endpoints don't read cookies/credentials) |
+| `Access-Control-Allow-Methods` | `POST, OPTIONS` |
+| `Access-Control-Allow-Headers` | `Content-Type` |
+| `Access-Control-Max-Age` | `600` (cache preflight for 10 minutes — fewer round-trips) |
+
+`GET /now-playing` continues to send `Access-Control-Allow-Origin: *` as today; no preflight needed for that (the existing widget polls it with a plain GET, no special headers).
+
+### Request size limits
+
+- `POST /ingest` body capped at **16 KB**. Larger bodies → 413, no state change. (Real payloads are ~500 bytes; the cap is purely a DoS-resistance backstop.)
+- `POST /heartbeat` body is read but discarded; capped at **0 bytes** (any non-empty body → 400). Heartbeats are pure liveness pings by contract.
 
 ### Server state machine
 
@@ -174,6 +209,15 @@ Single in-memory `current: TrackInfo` + `lastIngestAt: DateTime`, behind a lock 
 - On any success: swap `current.Art` to the resulting base64 data URL.
 - On total failure after 3 attempts: leave `current.Art` empty. Widget renders the dark placeholder slot (`#1a1a1e` background, already in `widget.html`). Track text (title/artist/album) remains visible.
 - Bytes flow purely in memory — never written to disk. Same lifecycle as the existing SMTC `Thumbnail` handling.
+
+**SSRF hardening:** the server fetches `art_url` from arbitrary local POSTs, which (under our localhost-only-unauthenticated threat model) means any local process could ask it to fetch anywhere. To avoid turning the widget server into a fetch proxy for an attacker:
+
+- **Scheme allowlist:** only `https://` URLs are fetched. `file://`, `http://`, `ftp://`, etc. are rejected at validation time (treated as if `art_url` were empty — track text still renders, art slot stays blank). This is the load-bearing mitigation.
+- **Response size cap:** abort the fetch after **5 MB**. Real Tidal album art is well under 200 KB.
+- **Timeout:** **5 s** per fetch attempt.
+- **Single in-flight fetch:** an in-progress fetch for a different `art_url` is cancelled when a new `art_url` arrives, so a slow CDN can't pile up parallel work.
+
+No host allowlist (would require chasing Tidal's CDN hostname if they ever migrate). Scheme + size + timeout cover the worst cases; you accepted the residual risk in design review.
 
 ### Pause vs idle semantics
 
@@ -205,6 +249,16 @@ Two new jobs are added to the **existing `.github/workflows/build.yml`** (not a 
 ```
 
 No `RuntimeIdentifier` baked in — passed at publish time via `-r`. The existing csproj is amended in the same direction: `<RuntimeIdentifier>` is dropped from the file and `-r win-x64` is passed on the CLI from `build.yml`. Symmetry between the two projects.
+
+**Critical existing-csproj edit:** the `Microsoft.NET.Sdk` default `<Compile>` glob picks up `**/*.cs` under the project's directory, which would pull `src/Browser/**/*.cs` into the Windows build and cause a duplicate `Program` entry-point conflict. The existing csproj must explicitly exclude the Browser subtree:
+
+```xml
+<ItemGroup>
+  <Compile Remove="Browser/**/*.cs" />
+</ItemGroup>
+```
+
+The new `Browser/TidalNowPlaying.Browser.csproj` does not need a symmetric exclude — its default glob is rooted at `src/Browser/` and naturally doesn't see the Windows-only files.
 
 ### New jobs in `build.yml`
 
@@ -246,6 +300,9 @@ release:
   runs-on: ubuntu-latest
   needs: [build, build-browser-server, package-extension]
   if: always()
+  concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: true
   permissions:
     contents: write
   steps:
@@ -259,6 +316,14 @@ release:
           if [ "$name" = "tidal-extension" ]; then
             cp "$dir"*.zip "release/${name}.zip"
           else
+            # actions/download-artifact@v4 does not preserve POSIX exec bits.
+            # Restore +x on non-Windows binaries before re-zipping so users
+            # don't have to chmod after download.
+            case "$name" in
+              *Browser-osx-*|*Browser-linux-*)
+                find "$dir" -maxdepth 1 -type f ! -name '*.html' -exec chmod +x {} \;
+                ;;
+            esac
             (cd "$dir" && zip -r "../../release/${name}.zip" .)
           fi
         done
@@ -275,6 +340,7 @@ release:
 
 - Rolling **`latest`** tag, updated on every push to `main`.
 - **Per-pass uploads** via `if: always()` on the `release` job. Individual artifact zips refresh independently — a flaky runner on one platform doesn't block fresh artifacts for other platforms. `softprops/action-gh-release` adds/overrides files individually, so untouched artifacts keep their prior version.
+- **Concurrency control:** `concurrency: { group: release-${{ github.ref }}, cancel-in-progress: true }` on the release job. Rapid back-to-back pushes don't race to upload — the newer push supersedes the older one in flight, so `latest` always reflects the most recent commit instead of an interleaved mix.
 - Stable download URLs: `https://github.com/<owner>/<repo>/releases/latest/download/<artifact>.zip`.
 - Workflow-artifact retention stays at 30 days as a debugging fallback. Releases never expire.
 
@@ -288,7 +354,7 @@ release:
 | `TidalNowPlaying-Browser-win-x64.zip` | new Windows server exe + widget.html | new |
 | `TidalNowPlaying-Browser-osx-arm64.zip` | macOS arm64 server binary + widget.html | new |
 | `TidalNowPlaying-Browser-linux-x64.zip` | Linux server binary + widget.html | new |
-| `tidal-extension.zip` | extension folder (manifest.json, content.js, service_worker.js, icons/) | new |
+| `tidal-extension.zip` | extension folder (manifest.json, content.js, icons/) | new |
 
 ## Error Handling
 
@@ -300,9 +366,10 @@ release:
 | **Port 8765 already in use** | `HttpListener.Start()` throws on startup. Server prints a clear message ("port 8765 is already in use — close the other Now Playing instance, or stop the process bound to that port") and exits non-zero. Same failure mode as today's SMTC build. |
 | **Server not yet running** when extension POSTs | `fetch()` rejects with a network error. Content script catches and ignores. The next event or heartbeat retries. No queueing, no backoff state in the extension. |
 | **Server restarts mid-stream** | Same as above. First successful POST after restart re-establishes state. |
-| **`navigator.mediaSession.metadata` is null** (page just loaded, Tidal hasn't populated yet) | Content script treats it as "no track" and skips the `/ingest` POST. Heartbeats continue. Once metadata populates, the next 500ms poll catches it and POSTs. |
-| **Tidal tab closed cleanly** | `chrome.tabs.onRemoved` in service worker fires a cleared `/ingest`. Widget hides immediately. |
-| **Browser crash / kill -9** | No clean POST possible. Idle timeout fires after 10s; widget hides. |
+| **`navigator.mediaSession.metadata` is null at page load** (no track has ever played in this tab) | Content script holds `lastSentState = 'none'` and skips the `/ingest` POST. Heartbeats continue. Once metadata populates, the next 500ms poll catches it and POSTs. |
+| **Metadata transitions populated → null** (user closed the Tidal player but kept the tab open, navigated to a non-player page within Tidal, etc.) | Content script detects `lastSentState == 'track'` with a current state of `'none'` and POSTs a cleared `/ingest` (empty fields, `is_playing: false`). Widget hides immediately. Without this, heartbeats would keep `lastIngestAt` fresh and the idle timeout would never fire, leaving the widget pinned to the last track. |
+| **Tidal tab closed cleanly** | Content script's `pagehide` handler fires `navigator.sendBeacon('/ingest', clearedBody)` synchronously during page teardown. Widget hides immediately. No service worker / `tabs.onRemoved` dependency. |
+| **Browser crash / kill -9 / extension disabled mid-session** | No clean POST possible (`pagehide` doesn't fire). Idle timeout fires after 10s; widget hides. |
 | **Multiple Tidal tabs open and playing** | Both content scripts POST their state; last write wins on the server. Documented as a known limitation in README. |
 | **Tidal mediaSession schema changes** | Content script field reads are wrapped in try/catch with sensible fallbacks (e.g., missing `artwork` → `art_url: ""`). Logged to console for debugging. |
 
@@ -322,12 +389,19 @@ A new xUnit test project (`net8.0`) covering:
 |---|---|
 | `IngestHandler` — valid POST | Mutates `current`, refreshes `lastIngestAt`, returns 200. |
 | `IngestHandler` — malformed JSON | Clears `current`, refreshes `lastIngestAt`, returns 400. |
-| `IngestHandler` — `art_url` unchanged | No refetch triggered (cache hit). |
+| `IngestHandler` — `art_url` unchanged across POSTs | No refetch triggered (cache hit). |
 | `IngestHandler` — `art_url` changed | `current.Art` cleared immediately; fetch kicked off. |
-| `HeartbeatHandler` | Refreshes `lastIngestAt`, does not touch `current`, returns 204. |
-| `ArtFetcher` — fetch succeeds first try | Returns base64 data URL; cache populated. |
-| `ArtFetcher` — fetch fails first, succeeds on retry | Final result populated; retry schedule respected. |
-| `ArtFetcher` — all retries fail | Returns empty; cache not poisoned with bad data. |
+| `IngestHandler` — body exceeds 16 KB | Returns 413, no state change, no `lastIngestAt` refresh. |
+| `HeartbeatHandler` — empty body | Refreshes `lastIngestAt`, does not touch `current`, returns 204. |
+| `HeartbeatHandler` — non-empty body | Returns 400, does not touch `current`, does not refresh `lastIngestAt`. |
+| CORS preflight — `OPTIONS /ingest`, `OPTIONS /heartbeat` | Responds 204 with the documented `Access-Control-Allow-*` headers. |
+| `ArtFetcher` — `https://` URL, fetch succeeds first try | Returns base64 data URL; cache populated. |
+| `ArtFetcher` — `https://` URL, fetch fails first, succeeds on retry | Final result populated; retry schedule (250ms / 1s / 3s) respected. |
+| `ArtFetcher` — `https://` URL, all retries fail | Returns empty; cache not poisoned with bad data. |
+| `ArtFetcher` — non-`https://` URL (`http://`, `file://`, `ftp://`) | Rejected at validation time; no fetch attempted; returns empty. |
+| `ArtFetcher` — response exceeds 5 MB size cap | Fetch aborted; returns empty. |
+| `ArtFetcher` — fetch exceeds 5 s timeout | Fetch aborted; counts as a failed attempt; retry schedule continues. |
+| `ArtFetcher` — new `art_url` arrives while previous fetch in flight | Previous fetch cancelled; new fetch proceeds. |
 | Idle timeout | With injected clock, advance >10s with no POSTs → `current` cleared, `is_playing=false`. |
 | `WidgetServer` — `/now-playing` JSON shape | Serializes `current` to the expected keys/values. Catches accidental schema drift. |
 
@@ -341,12 +415,13 @@ Documented in README:
 
 1. Start `TidalNowPlaying-Browser` server.
 2. Load unpacked extension from `extension/`.
-3. Open `http://localhost:8765/widget.html` in a browser tab (or as an OBS Browser Source).
+3. Open `http://127.0.0.1:8765/widget.html` in a browser tab (or as an OBS Browser Source).
 4. Play a track in `listen.tidal.com`. Widget populates within ~1s.
 5. Pause → widget shows paused state. Play → resumes.
 6. Skip track → new metadata + new art appear together; no flicker of stale art.
-7. Close Tidal tab → widget hides immediately.
-8. Kill browser (or disable the extension) without closing the tab → widget hides ~10s later.
+7. Navigate within the Tidal tab to a non-player page (e.g., settings) so the player unmounts → widget hides immediately (metadata populated → null transition triggers a cleared `/ingest`).
+8. Close Tidal tab → widget hides immediately (`pagehide` → `sendBeacon`).
+9. Kill browser (or disable the extension) without closing the tab → widget hides ~10s later (idle timeout fallback).
 
 No E2E automation in CI — Tidal accounts and a real browser aren't worth the complexity. The manual checklist is the release gate.
 
