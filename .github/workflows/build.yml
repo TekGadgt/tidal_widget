@@ -79,3 +79,27 @@ jobs:
       - name: Restore + test
         run: dotnet test tests/TidalNowPlaying.Browser.Tests.csproj -c Release --logger "console;verbosity=normal"
 
+  build-browser-server:
+    runs-on: ubuntu-latest
+    needs: [test-browser]
+    strategy:
+      matrix:
+        rid: [win-x64, osx-arm64, linux-x64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish ${{ matrix.rid }}
+        run: |
+          dotnet publish src/Browser/TidalNowPlaying.Browser.csproj \
+            -c Release -r ${{ matrix.rid }} \
+            --self-contained true -p:PublishSingleFile=true \
+            -o publish/browser/${{ matrix.rid }}
+      - name: Bundle widget.html
+        run: cp widget.html publish/browser/${{ matrix.rid }}/widget.html
+      - uses: actions/upload-artifact@v5
+        with:
+          name: TidalNowPlaying-Browser-${{ matrix.rid }}
+          path: publish/browser/${{ matrix.rid }}/
+
