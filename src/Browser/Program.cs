@@ -87,10 +87,27 @@ async Task PostRouter(HttpListenerContext ctx)
 
     if (path == "/heartbeat")
     {
-        // ContentLength64 == -1 means the header was absent; treat as 0-length body.
         long rawLen = req.ContentLength64;
-        int length = rawLen <= 0 ? 0 : (int)Math.Min(rawLen, int.MaxValue);
-        var result = beat.Apply(length);
+
+        if (rawLen > 0)
+        {
+            // Explicitly non-empty per the Content-Length header.
+            resp.StatusCode = beat.Apply((int)Math.Min(rawLen, int.MaxValue)).StatusCode;
+            resp.Close();
+            return;
+        }
+
+        // rawLen <= 0: header absent / unknown / chunked. Probe the stream — if any
+        // body bytes show up, treat as non-empty and reject. Otherwise 0.
+        int observed = 0;
+        if (rawLen < 0)
+        {
+            var probe = new byte[1];
+            int n = await req.InputStream.ReadAsync(probe, 0, 1);
+            if (n > 0) observed = 1;
+        }
+
+        var result = beat.Apply(observed);
         resp.StatusCode = result.StatusCode;
         resp.Close();
         return;
