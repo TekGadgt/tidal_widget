@@ -3,6 +3,32 @@ namespace TidalNowPlaying.Tests;
 public class IngestHandlerTests
 {
     [Fact]
+    public async Task ApplyAsync_ArtUrlChanged_ClearsCurrentArtImmediately()
+    {
+        var state = new State();
+        // Pre-populate state with a current track and stale art
+        state.Update(new TrackInfo { Title = "Old", Art = "data:image/jpeg;base64,STALE" },
+                     new DateTime(2026, 5, 10, 11, 0, 0, DateTimeKind.Utc));
+
+        // Slow fetcher so the new art doesn't populate during the assertion
+        var fetcher = new ArtFetcher(FakeHttpMessageHandler.Slow(TimeSpan.FromSeconds(10)),
+                                     timeout: TimeSpan.FromSeconds(30),
+                                     retryDelays: new[] { TimeSpan.Zero });
+        var clock = new TestClock(new DateTime(2026, 5, 10, 12, 0, 0, DateTimeKind.Utc));
+        var handler = new IngestHandler(state, fetcher, clock);
+
+        string body = """
+            {"title":"New","artist":"X","album":"","is_playing":true,
+             "art_url":"https://example.com/different.jpg"}
+            """;
+
+        await handler.ApplyAsync(body);
+
+        Assert.Equal("New", state.Current.Title);
+        Assert.Equal("", state.Current.Art);
+    }
+
+    [Fact]
     public async Task ApplyAsync_SameArtUrlAcrossPosts_DoesNotRefetch()
     {
         var state = new State();
