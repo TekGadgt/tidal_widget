@@ -51,6 +51,7 @@ public class WidgetServerTests : IAsyncDisposable
         Assert.Equal("*",                  resp.Headers.GetValues("Access-Control-Allow-Origin").Single());
         Assert.Equal("POST, OPTIONS",      resp.Headers.GetValues("Access-Control-Allow-Methods").Single());
         Assert.Equal("Content-Type",       resp.Headers.GetValues("Access-Control-Allow-Headers").Single());
+        Assert.Equal("true",               resp.Headers.GetValues("Access-Control-Allow-Private-Network").Single());
         Assert.Equal("600",                resp.Headers.GetValues("Access-Control-Max-Age").Single());
     }
 

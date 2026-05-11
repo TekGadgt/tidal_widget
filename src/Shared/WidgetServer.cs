@@ -65,6 +65,7 @@ public class WidgetServer
             {
                 resp.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
                 resp.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+                resp.Headers.Add("Access-Control-Allow-Private-Network", "true");
                 resp.Headers.Add("Access-Control-Max-Age", "600");
                 resp.StatusCode = 204;
                 resp.Close();
