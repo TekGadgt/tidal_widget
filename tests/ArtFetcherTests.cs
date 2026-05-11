@@ -92,4 +92,32 @@ public class ArtFetcherTests
         Assert.Null(result);
         Assert.Equal(3, handler.Calls.Count);
     }
+
+    [Fact]
+    public async Task FetchAsync_SameUrlTwice_OnlyFetchesOnce()
+    {
+        byte[] body = new byte[] { 1, 2, 3 };
+        var handler = FakeHttpMessageHandler.AlwaysReturn(body);
+        var fetcher = new ArtFetcher(handler, retryDelays: new[] { TimeSpan.Zero });
+
+        string? first  = await fetcher.FetchAsync("https://example.com/art.jpg");
+        string? second = await fetcher.FetchAsync("https://example.com/art.jpg");
+
+        Assert.NotNull(first);
+        Assert.Equal(first, second);
+        Assert.Single(handler.Calls);
+    }
+
+    [Fact]
+    public async Task FetchAsync_DifferentUrl_FetchesAgain()
+    {
+        byte[] body = new byte[] { 1, 2, 3 };
+        var handler = FakeHttpMessageHandler.AlwaysReturn(body);
+        var fetcher = new ArtFetcher(handler, retryDelays: new[] { TimeSpan.Zero });
+
+        await fetcher.FetchAsync("https://example.com/a.jpg");
+        await fetcher.FetchAsync("https://example.com/b.jpg");
+
+        Assert.Equal(2, handler.Calls.Count);
+    }
 }

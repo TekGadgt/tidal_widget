@@ -8,6 +8,10 @@ public class ArtFetcher
     private readonly TimeSpan timeout;
     private readonly TimeSpan[] retryDelays;
 
+    private readonly object cacheLock = new();
+    private string? cachedUrl;
+    private string? cachedResult;
+
     public ArtFetcher(
         HttpMessageHandler? handler = null,
         TimeSpan? timeout = null,
@@ -28,11 +32,24 @@ public class ArtFetcher
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https")
             return null;
 
+        lock (cacheLock)
+        {
+            if (url == cachedUrl && cachedResult != null) return cachedResult;
+        }
+
         foreach (var delay in retryDelays)
         {
             if (delay > TimeSpan.Zero) await Task.Delay(delay);
             var result = await AttemptOnceAsync(url);
-            if (result != null) return result;
+            if (result != null)
+            {
+                lock (cacheLock)
+                {
+                    cachedUrl    = url;
+                    cachedResult = result;
+                }
+                return result;
+            }
         }
         return null;
     }
