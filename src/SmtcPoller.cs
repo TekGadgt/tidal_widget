@@ -90,11 +90,19 @@ public class SmtcPoller
             if (thumb != null)
             {
                 using var stream = await thumb.OpenReadAsync();
-                using var reader = new DataReader(stream);
-                await reader.LoadAsync((uint)stream.Size);
-                byte[] bytes = new byte[stream.Size];
-                reader.ReadBytes(bytes);
-                art = "data:image/jpeg;base64," + Convert.ToBase64String(bytes);
+                // Bound the thumbnail size: WinRT Size is ulong, but real thumbnails
+                // are tiny; cap at 8 MB to keep allocations predictable and avoid
+                // truncation when casting to uint.
+                const ulong MaxThumbBytes = 8UL * 1024 * 1024;
+                ulong rawSize = stream.Size;
+                if (rawSize > 0 && rawSize <= MaxThumbBytes)
+                {
+                    using var reader = new DataReader(stream);
+                    await reader.LoadAsync((uint)rawSize);
+                    byte[] bytes = new byte[(int)rawSize];
+                    reader.ReadBytes(bytes);
+                    art = "data:image/jpeg;base64," + Convert.ToBase64String(bytes);
+                }
             }
         }
         catch { }
