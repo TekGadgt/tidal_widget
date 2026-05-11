@@ -39,6 +39,21 @@ public class WidgetServerTests : IAsyncDisposable
         Assert.Equal("data:image/jpeg;base64,XYZ", root.GetProperty("art").GetString());
     }
 
+    [Theory]
+    [InlineData("/ingest")]
+    [InlineData("/heartbeat")]
+    public async Task OptionsPreflight_ReturnsCorsHeadersAnd204(string path)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Options, path);
+        var resp = await http.SendAsync(req);
+
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, resp.StatusCode);
+        Assert.Equal("*",                  resp.Headers.GetValues("Access-Control-Allow-Origin").Single());
+        Assert.Equal("POST, OPTIONS",      resp.Headers.GetValues("Access-Control-Allow-Methods").Single());
+        Assert.Equal("Content-Type",       resp.Headers.GetValues("Access-Control-Allow-Headers").Single());
+        Assert.Equal("600",                resp.Headers.GetValues("Access-Control-Max-Age").Single());
+    }
+
     public async ValueTask DisposeAsync()
     {
         cts.Cancel();
