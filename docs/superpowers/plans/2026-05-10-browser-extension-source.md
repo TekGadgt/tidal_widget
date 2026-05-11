@@ -2900,7 +2900,7 @@ Replace the existing "Building from source" section with:
 
 Push to GitHub and the Actions workflow builds all variants automatically. The `latest` GitHub Release is updated on every push to `main` with seven artifacts:
 
-- `TidalNowPlaying.zip`, `SpotifyNowPlaying.zip`, `NowPlaying.zip` — existing Windows + SMTC builds.
+- `TidalNowPlaying.zip`, `SpotifyNowPlaying.zip`, `AnyNowPlaying.zip` — existing Windows + SMTC builds.
 - `TidalNowPlaying-Browser-win-x64.zip`, `TidalNowPlaying-Browser-osx-arm64.zip`, `TidalNowPlaying-Browser-linux-x64.zip` — cross-platform browser-source server builds.
 - `tidal-extension.zip` — the Chrome MV3 extension.
 

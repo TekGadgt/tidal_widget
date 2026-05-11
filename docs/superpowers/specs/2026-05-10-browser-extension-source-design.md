@@ -384,7 +384,7 @@ release:
 |---|---|---|
 | `TidalNowPlaying.zip` | Windows SMTC build (Tidal filter) + widget.html | existing |
 | `SpotifyNowPlaying.zip` | Windows SMTC build (Spotify filter) + widget.html | existing |
-| `NowPlaying.zip` | Windows SMTC build (any app) + widget.html | existing |
+| `AnyNowPlaying.zip` | Windows SMTC build (any app) + widget.html | existing |
 | `TidalNowPlaying-Browser-win-x64.zip` | new Windows server exe + widget.html | new |
 | `TidalNowPlaying-Browser-osx-arm64.zip` | macOS arm64 server binary + widget.html | new |
 | `TidalNowPlaying-Browser-linux-x64.zip` | Linux server binary + widget.html | new |

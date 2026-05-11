@@ -9,7 +9,7 @@ Both produce the same `widget.html` and JSON feed, so the OBS Browser Source set
 
 ## Usage — SMTC build (Windows only)
 
-1. Download `TidalNowPlaying.zip` (or `SpotifyNowPlaying.zip` / `NowPlaying.zip` for the any-app variant) from the latest [Release](https://github.com/TekGadgt/tidal_widget/releases/latest). Unzip.
+1. Download `TidalNowPlaying.zip` (or `SpotifyNowPlaying.zip` / `AnyNowPlaying.zip` for the any-app variant) from the latest [Release](https://github.com/TekGadgt/tidal_widget/releases/latest). Unzip.
 2. Run `TidalNowPlaying.exe` (keep it running while streaming).
 3. In OBS, add a **Browser Source**:
    - URL: `http://127.0.0.1:8765/widget.html`
@@ -52,7 +52,7 @@ Known limitations:
 
 Push to GitHub and the Actions workflow builds all variants automatically. The `latest` GitHub Release is updated on every push to `main` with seven artifacts:
 
-- `TidalNowPlaying.zip`, `SpotifyNowPlaying.zip`, `NowPlaying.zip` — Windows + SMTC builds.
+- `TidalNowPlaying.zip`, `SpotifyNowPlaying.zip`, `AnyNowPlaying.zip` — Windows + SMTC builds.
 - `TidalNowPlaying-Browser-win-x64.zip`, `TidalNowPlaying-Browser-osx-arm64.zip`, `TidalNowPlaying-Browser-linux-x64.zip` — cross-platform browser-source server builds.
 - `tidal-extension.zip` — the Chrome MV3 extension.
 
