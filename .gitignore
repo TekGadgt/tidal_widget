@@ -1,5 +1,5 @@
 # Local Claude Code settings (project-scoped, not shared)
-.claude/settings.local.json
+.claude/
 
 # .NET build output
 bin/
