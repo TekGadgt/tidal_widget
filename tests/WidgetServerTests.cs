@@ -42,17 +42,33 @@ public class WidgetServerTests : IAsyncDisposable
     [Theory]
     [InlineData("/ingest")]
     [InlineData("/heartbeat")]
-    public async Task OptionsPreflight_ReturnsCorsHeadersAnd204(string path)
+    public async Task OptionsPreflight_FromExtensionOrigin_Returns204WithCorsAndPnaHeaders(string path)
     {
         using var req = new HttpRequestMessage(HttpMethod.Options, path);
+        req.Headers.Add("Origin", "chrome-extension://abcdefghijklmnop");
         var resp = await http.SendAsync(req);
 
         Assert.Equal(System.Net.HttpStatusCode.NoContent, resp.StatusCode);
-        Assert.Equal("*",                  resp.Headers.GetValues("Access-Control-Allow-Origin").Single());
-        Assert.Equal("POST, OPTIONS",      resp.Headers.GetValues("Access-Control-Allow-Methods").Single());
-        Assert.Equal("Content-Type",       resp.Headers.GetValues("Access-Control-Allow-Headers").Single());
-        Assert.Equal("true",               resp.Headers.GetValues("Access-Control-Allow-Private-Network").Single());
-        Assert.Equal("600",                resp.Headers.GetValues("Access-Control-Max-Age").Single());
+        Assert.Equal("chrome-extension://abcdefghijklmnop",
+            resp.Headers.GetValues("Access-Control-Allow-Origin").Single());
+        Assert.Equal("POST, OPTIONS",  resp.Headers.GetValues("Access-Control-Allow-Methods").Single());
+        Assert.Equal("Content-Type",   resp.Headers.GetValues("Access-Control-Allow-Headers").Single());
+        Assert.Equal("true",           resp.Headers.GetValues("Access-Control-Allow-Private-Network").Single());
+        Assert.Equal("600",            resp.Headers.GetValues("Access-Control-Max-Age").Single());
+    }
+
+    [Theory]
+    [InlineData("/ingest")]
+    [InlineData("/heartbeat")]
+    public async Task OptionsPreflight_FromPublicOrigin_Returns403WithoutCorsHeaders(string path)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Options, path);
+        req.Headers.Add("Origin", "https://evil.example.com");
+        var resp = await http.SendAsync(req);
+
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.False(resp.Headers.Contains("Access-Control-Allow-Origin"));
+        Assert.False(resp.Headers.Contains("Access-Control-Allow-Private-Network"));
     }
 
     public async ValueTask DisposeAsync()

@@ -58,16 +58,36 @@ public class WidgetServer
             string path   = req.Url?.AbsolutePath ?? "";
             string method = req.HttpMethod;
 
-            resp.Headers.Add("Access-Control-Allow-Origin", "*");
             resp.Headers.Add("Cache-Control", "no-cache");
+
+            string origin = req.Headers["Origin"] ?? "";
+            bool fromExtension = origin.StartsWith("chrome-extension://", StringComparison.Ordinal);
+
+            // CORS headers are granted only to the extension. Same-origin requests
+            // (widget polling /now-playing from the local server itself) don't have
+            // an Origin header and don't need CORS. Public web origins get no
+            // approval, so the browser blocks them.
+            if (fromExtension)
+            {
+                resp.Headers.Add("Access-Control-Allow-Origin", origin);
+                resp.Headers.Add("Vary", "Origin");
+            }
 
             if (method == "OPTIONS" && (path == "/ingest" || path == "/heartbeat"))
             {
-                resp.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
-                resp.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
-                resp.Headers.Add("Access-Control-Allow-Private-Network", "true");
-                resp.Headers.Add("Access-Control-Max-Age", "600");
-                resp.StatusCode = 204;
+                if (fromExtension)
+                {
+                    resp.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
+                    resp.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+                    resp.Headers.Add("Access-Control-Allow-Private-Network", "true");
+                    resp.Headers.Add("Access-Control-Max-Age", "600");
+                    resp.StatusCode = 204;
+                }
+                else
+                {
+                    // Reject preflights from anyone else — no CORS approval given.
+                    resp.StatusCode = 403;
+                }
                 resp.Close();
                 return;
             }
