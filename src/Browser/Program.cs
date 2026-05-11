@@ -29,9 +29,35 @@ async Task PostRouter(HttpListenerContext ctx)
 
     if (path == "/ingest")
     {
-        string body;
-        using (var reader = new StreamReader(req.InputStream, req.ContentEncoding))
-            body = await reader.ReadToEndAsync();
+        const int MaxBodyBytes = 16 * 1024;
+
+        // Reject early if the declared length already exceeds the cap.
+        if (req.ContentLength64 > MaxBodyBytes)
+        {
+            resp.StatusCode = 413;
+            resp.Close();
+            return;
+        }
+
+        // Read incrementally, capping at MaxBodyBytes + 1 so we can detect oversize
+        // bodies without buffering arbitrary amounts (defends against missing or
+        // spoofed Content-Length, and against chunked encoding).
+        using var mem = new MemoryStream();
+        var buf = new byte[8 * 1024];
+        long total = 0;
+        int read;
+        while ((read = await req.InputStream.ReadAsync(buf, 0, buf.Length)) > 0)
+        {
+            total += read;
+            if (total > MaxBodyBytes)
+            {
+                resp.StatusCode = 413;
+                resp.Close();
+                return;
+            }
+            mem.Write(buf, 0, read);
+        }
+        string body = req.ContentEncoding.GetString(mem.ToArray());
 
         var result = await ingest.ApplyAsync(body);
         resp.StatusCode = result.StatusCode;
