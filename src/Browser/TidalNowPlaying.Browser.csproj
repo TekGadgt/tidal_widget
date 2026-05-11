@@ -16,4 +16,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TidalNowPlaying.Browser.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\widget.html" Link="widget.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
 </Project>
